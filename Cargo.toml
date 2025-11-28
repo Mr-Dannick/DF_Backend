@@ -1,0 +1,9 @@
+[package]
+name = "DF_backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotenv = "0.15.0"
+byteorder = "1.5.0"
+crc32fast = "1.5.0"
