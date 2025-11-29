@@ -15,7 +15,7 @@ pub struct PlayerConnection {
     pub ip_address: String,
     pub reforger_id: String,
     pub username: String,
-    pub battleeye_guid: String,
+    pub battleye_guid: String,
 }
 
 pub struct PlayerMonitor {
@@ -70,7 +70,7 @@ impl PlayerMonitor {
                     println!("  Username: {}", player.username);
                     println!("  IP: {}", player.ip_address);
                     println!("  Reforger ID: {}", player.reforger_id);
-                    println!("  BattlEye GUID: {}", player.battleeye_guid);
+                    println!("  BattlEye GUID: {}", player.battleye_guid);
                     println!("  Identity: {}", player.identity);
                     println!();
 
@@ -86,7 +86,7 @@ impl PlayerMonitor {
                                         last_seen = CURRENT_TIMESTAMP";
                                 if let Err(e) = conn.exec_drop(
                                     upsert_players,
-                                    (player.reforger_id.as_str(), player.battleeye_guid.as_str()),
+                                    (player.reforger_id.as_str(), player.battleye_guid.as_str()),
                                 ) {
                                     eprintln!("Failed to upsert Players: {}", e);
                                     continue;
@@ -206,7 +206,7 @@ impl PlayerMonitor {
                             ip_address: ip.clone(),
                             reforger_id: rid.clone(),
                             username: user.clone(),
-                            battleeye_guid: caps[1].to_string(),
+                            battleye_guid: caps[1].to_string(),
                         });
 
                         current_identity = None;
