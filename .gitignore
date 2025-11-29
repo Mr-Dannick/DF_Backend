@@ -1,3 +1,4 @@
 /target
 .env
 console.log
+connect.log
