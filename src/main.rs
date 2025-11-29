@@ -1,9 +1,13 @@
 use dotenv::dotenv;
 mod kill_watcher;
 mod database_setup;
+mod player_monitor;
+
 use std::env;
 use std::path::Path;
+use std::thread;
 use crate::database_setup::setup_database;
+use player_monitor::PlayerMonitor;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
@@ -21,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_ip = env::var("DATABASE_IP")?;
     let database_port = env::var("DATABASE_PORT")?;
     let database_name = env::var("DATABASE_NAME")?;
-    
+
     println!("Database setup complete: {}", database_setup);
     if !database_setup {
         println!("Warning: Database setup is not complete. Some features may not work as expected.");
@@ -29,7 +33,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     check_env(file_path.to_str().unwrap())?;
 
-    kill_watcher::watch_console_log(file_path, timeout);
+    // Run player monitor and kill watcher simultaneously in separate threads.
+    let monitor_path = file_path.to_str().unwrap().to_string();
+    let monitor = PlayerMonitor::new(&monitor_path);
+
+    let monitor_handle = thread::spawn(move || {
+        monitor.start_monitoring();
+    });
+
+    let watcher_handle = thread::spawn(move || {
+        kill_watcher::watch_console_log(file_path, timeout);
+    });
+
+    // Wait for both (these are long-running loops; joining will block here).
+    let _ = monitor_handle.join();
+    let _ = watcher_handle.join();
+
     Ok(())
 }
 

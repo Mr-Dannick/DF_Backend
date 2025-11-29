@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 dotenv = "0.15.0"
 mysql = "26.0.1"
+regex = "1.12.2"
