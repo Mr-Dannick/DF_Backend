@@ -4,6 +4,10 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use regex::Regex;
+use std::env;
+
+// Add mysql imports
+use mysql::{Pool, prelude::*};
 
 #[derive(Debug)]
 pub struct PlayerConnection {
@@ -31,6 +35,34 @@ impl PlayerMonitor {
     pub fn start_monitoring(mut self) {
         println!("Starting player connection monitor...");
 
+        // Try to create a DB pool from env vars. If any are missing or the pool fails,
+        // continue running but skip DB writes.
+        let db_pool: Option<Pool> = match (
+            env::var("DATABASE_USER"),
+            env::var("DATABASE_PASSWORD"),
+            env::var("DATABASE_IP"),
+            env::var("DATABASE_PORT"),
+            env::var("DATABASE_NAME"),
+        ) {
+            (Ok(user), Ok(pass), Ok(ip), Ok(port), Ok(db)) => {
+                let url = format!("mysql://{}:{}@{}:{}/{}", user, pass, ip, port, db);
+                match Pool::new(url.as_str()) {
+                    Ok(p) => {
+                        println!("DB pool created");
+                        Some(p)
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to create DB pool: {}", e);
+                        None
+                    }
+                }
+            }
+            _ => {
+                eprintln!("DB env vars missing; database writes disabled");
+                None
+            }
+        };
+
         loop {
             if let Ok(connections) = self.check_for_events() {
                 for player in connections {
@@ -41,6 +73,72 @@ impl PlayerMonitor {
                     println!("  BattlEye GUID: {}", player.battleeye_guid);
                     println!("  Identity: {}", player.identity);
                     println!();
+
+                    // If DB pool is available, attempt to upsert into Players, PlayerNames, ConnectionLogs
+                    if let Some(pool) = &db_pool {
+                        match pool.get_conn() {
+                            Ok(mut conn) => {
+                                // Upsert Players (using reforger_id unique constraint)
+                                let upsert_players = r"INSERT INTO Players (reforger_id, battleye_guid)
+                                    VALUES (?, ?)
+                                    ON DUPLICATE KEY UPDATE
+                                        battleye_guid = VALUES(battleye_guid),
+                                        last_seen = CURRENT_TIMESTAMP";
+                                if let Err(e) = conn.exec_drop(
+                                    upsert_players,
+                                    (player.reforger_id.as_str(), player.battleeye_guid.as_str()),
+                                ) {
+                                    eprintln!("Failed to upsert Players: {}", e);
+                                    continue;
+                                }
+
+                                // Get player_id
+                                let select_id = "SELECT player_id FROM Players WHERE reforger_id = ?";
+                                let player_id_res: Result<Option<u64>, _> =
+                                    conn.exec_first(select_id, (player.reforger_id.as_str(),));
+                                let player_id = match player_id_res {
+                                    Ok(Some(id)) => id,
+                                    Ok(None) => {
+                                        eprintln!("Inserted player but could not retrieve id");
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to query player id: {}", e);
+                                        continue;
+                                    }
+                                };
+
+                                // Upsert PlayerNames (unique (player_id, username))
+                                let upsert_name = r"INSERT INTO PlayerNames (player_id, username)
+                                    VALUES (?, ?)
+                                    ON DUPLICATE KEY UPDATE
+                                        last_used = CURRENT_TIMESTAMP";
+                                if let Err(e) = conn.exec_drop(
+                                    upsert_name,
+                                    (player_id, player.username.as_str()),
+                                ) {
+                                    eprintln!("Failed to upsert PlayerNames: {}", e);
+                                    // continue to connection logs attempt anyway
+                                }
+
+                                // Upsert ConnectionLogs (primary key (player_id, ip_address))
+                                let upsert_conn = r"INSERT INTO ConnectionLogs (player_id, ip_address, username, connected_at)
+                                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                    ON DUPLICATE KEY UPDATE
+                                        username = VALUES(username),
+                                        connected_at = CURRENT_TIMESTAMP";
+                                if let Err(e) = conn.exec_drop(
+                                    upsert_conn,
+                                    (player_id, player.ip_address.as_str(), player.username.as_str()),
+                                ) {
+                                    eprintln!("Failed to upsert ConnectionLogs: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to get DB connection from pool: {}", e);
+                            }
+                        }
+                    }
                 }
             }
 
