@@ -7,3 +7,4 @@ edition = "2024"
 dotenv = "0.15.0"
 mysql = "26.0.1"
 regex = "1.12.2"
+uuid = { version = "1.18.1", features = ["v4"] }
