@@ -30,6 +30,7 @@ pub fn setup_database(
                 let _ = conn.query_drop("DROP TABLE IF EXISTS PlayerStats");
                 let _ = conn.query_drop("DROP TABLE IF EXISTS ConnectionLogs");
                 let _ = conn.query_drop("DROP TABLE IF EXISTS PlayerNames");
+                let _ = conn.query_drop("DROP TABLE IF EXISTS PlayerDiscordLink");
                 let _ = conn.query_drop("DROP TABLE IF EXISTS Players");
 
                 // Create Players table
@@ -41,6 +42,17 @@ pub fn setup_database(
                         first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
                         last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         INDEX idx_reforger_id (reforger_id)
+                    )"
+                );
+
+                // Create PlayerDiscordLink table
+                let _ = conn.query_drop(
+                    r"CREATE TABLE PlayerDiscordLink (
+                        player_id INT UNSIGNED NOT NULL,
+                        discord_id VARCHAR(64) NOT NULL,
+                        PRIMARY KEY (player_id),
+                        UNIQUE KEY unique_discord_id (discord_id),
+                        FOREIGN KEY (player_id) REFERENCES Players(player_id) ON DELETE CASCADE
                     )"
                 );
 
